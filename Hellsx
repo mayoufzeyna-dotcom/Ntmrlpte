@@ -1,0 +1,472 @@
+local player = game.Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local rootPart = char:WaitForChild("HumanoidRootPart")
+local humanoid = char:WaitForChild("Humanoid")
+local entitiesFolder = workspace.Entities
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+-- Remote Block
+local blockRemote = char:WaitForChild("CharacterHandler"):WaitForChild("Remotes"):WaitForChild("Block")
+
+-- Variables pour la sécurité de vie
+local emergencyModeDisabled = false
+local emergencyDisableTime = 0
+
+-- Variable pour l'authentification
+local isAuthenticated = false
+local correctPassword = "A2y<>3"
+
+-- Met à jour les références après respawn
+local function updateCharacterReferences()
+    char = player.Character or player.CharacterAdded:Wait()
+    rootPart = char:WaitForChild("HumanoidRootPart")
+    humanoid = char:WaitForChild("Humanoid")
+    blockRemote = char:WaitForChild("CharacterHandler"):WaitForChild("Remotes"):WaitForChild("Block")
+    
+    -- Reset des variables importantes après respawn
+    isDodging = false
+    lastHealth = humanoid.Health
+    
+    if tweenDodgeOn then
+        task.wait(0.1)
+        setNoclip(true)
+    end
+    
+    print("🔄 Character references updated after respawn")
+end
+
+player.CharacterAdded:Connect(function()
+    wait(1)
+    updateCharacterReferences()
+end)
+
+-- UI
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "LavaGuyPanel"
+screenGui.ResetOnSpawn = false
+
+-- Interface d'authentification
+local authFrame = Instance.new("Frame")
+authFrame.Size = UDim2.new(0, 300, 0, 150)
+authFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
+authFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+authFrame.BorderSizePixel = 0
+authFrame.Active = true
+authFrame.Draggable = true
+Instance.new("UICorner", authFrame).CornerRadius = UDim.new(0, 10)
+authFrame.Parent = screenGui
+
+-- Authentication title
+local authTitle = Instance.new("TextLabel")
+authTitle.Size = UDim2.new(1, 0, 0, 40)
+authTitle.Position = UDim2.new(0, 0, 0, 0)
+authTitle.BackgroundTransparency = 1
+authTitle.Text = "🔐 Authentication Required"
+authTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+authTitle.TextScaled = true
+authTitle.Font = Enum.Font.SourceSansBold
+authTitle.Parent = authFrame
+
+-- TextBox for password
+local passwordBox = Instance.new("TextBox")
+passwordBox.Size = UDim2.new(0.8, 0, 0, 35)
+passwordBox.Position = UDim2.new(0.1, 0, 0, 50)
+passwordBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+passwordBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+passwordBox.PlaceholderText = "Enter password and press Enter..."
+passwordBox.Text = ""
+passwordBox.TextScaled = true
+passwordBox.Font = Enum.Font.SourceSans
+passwordBox.ClearTextOnFocus = false
+Instance.new("UICorner", passwordBox).CornerRadius = UDim.new(0, 5)
+passwordBox.Parent = authFrame
+
+-- Login button (disabled initially)
+local loginBtn = Instance.new("TextButton")
+loginBtn.Size = UDim2.new(0.4, 0, 0, 30)
+loginBtn.Position = UDim2.new(0.1, 0, 0, 100)
+loginBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+loginBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+loginBtn.Text = "Enter Key Only"
+loginBtn.TextScaled = true
+loginBtn.Font = Enum.Font.SourceSansBold
+loginBtn.Active = false
+Instance.new("UICorner", loginBtn).CornerRadius = UDim.new(0, 5)
+loginBtn.Parent = authFrame
+
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0.4, 0, 0, 30)
+closeBtn.Position = UDim2.new(0.5, 0, 0, 100)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.Text = "Close"
+closeBtn.TextScaled = true
+closeBtn.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
+closeBtn.Parent = authFrame
+
+-- Label for error messages
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 20)
+statusLabel.Position = UDim2.new(0, 0, 0, 130)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = ""
+statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+statusLabel.TextScaled = true
+statusLabel.Font = Enum.Font.SourceSans
+statusLabel.Parent = authFrame
+
+-- Authentication function
+local function authenticate()
+    if passwordBox.Text == correctPassword then
+        isAuthenticated = true
+        authFrame.Visible = false
+        print("✅ Authentication successful!")
+        statusLabel.Text = ""
+    else
+        statusLabel.Text = "❌ Incorrect password!"
+        passwordBox.Text = ""
+        print("❌ Login attempt failed")
+    end
+end
+
+-- Authentication events (ONLY Enter key works)
+passwordBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        authenticate()
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+-- Fonction pour créer les boutons principaux (seulement si authentifié)
+local function createMainButton(text, posY, color)
+    if not isAuthenticated then return end
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 40, 0, 40)
+    btn.Position = UDim2.new(1, -50, 0, posY)
+    btn.BackgroundColor3 = color
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.Text = text
+    btn.TextScaled = true
+    btn.Draggable = true
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    btn.Parent = screenGui
+    return btn
+end
+
+-- Variables pour les boutons principaux
+local mainButton, flyButton, frame
+
+-- Fonction pour initialiser l'interface principale
+local function initializeMainInterface()
+    if not isAuthenticated then return end
+    
+    mainButton = createMainButton("⚙", 100, Color3.fromRGB(50, 50, 50))
+    flyButton = createMainButton("✈", 150, Color3.fromRGB(70, 130, 180))
+
+    flyButton.MouseButton1Click:Connect(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+    end)
+
+    frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 220, 0, 200)
+    frame.Position = UDim2.new(1, -270, 0, 100)
+    frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    frame.Visible = false
+    frame.Active = true
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    frame.Parent = screenGui
+
+    local layout = Instance.new("UIListLayout", frame)
+    layout.Padding = UDim.new(0, 5)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.VerticalAlignment = Enum.VerticalAlignment.Top
+
+    mainButton.MouseButton1Click:Connect(function()
+        frame.Visible = not frame.Visible
+    end)
+end
+
+-- Fonction pour créer les boutons du menu
+local function createButton(text)
+    if not isAuthenticated or not frame then return end
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 40)
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextScaled = true
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.Text = text
+    btn.Parent = frame
+    return btn
+end
+
+-- Surveillance de l'authentification pour initialiser l'interface
+task.spawn(function()
+    while not isAuthenticated do
+        task.wait(0.1)
+    end
+    
+    -- Initialiser l'interface principale une fois authentifié
+    initializeMainInterface()
+    
+    -- Attendre que le frame soit créé
+    while not frame do
+        task.wait(0.1)
+    end
+    
+    -- Trouver le LavaGuy le plus proche
+    local function getNearestLavaGuy()
+        local nearestMob, shortestDist = nil, math.huge
+        for _, mob in ipairs(entitiesFolder:GetChildren()) do
+            if mob.Name == "LavaGuy" then
+                local humanoidMob = mob:FindFirstChildOfClass("Humanoid")
+                if humanoidMob and humanoidMob.Health > 0 then
+                    local head = mob:FindFirstChild("Head") or mob:FindFirstChildWhichIsA("BasePart")
+                    if head then
+                        local dist = (head.Position - rootPart.Position).Magnitude
+                        if dist < shortestDist then
+                            shortestDist = dist
+                            nearestMob = mob
+                        end
+                    end
+                end
+            end
+        end
+        return nearestMob, shortestDist
+    end
+
+    -- ESP Nearest
+    local nearestESPOn = false
+    local nearestBillboard
+    local nearestESPBtn = createButton("ESP Nearest LavaGuy")
+
+    local function cleanupNearestESP()
+        if nearestBillboard then
+            nearestBillboard:Destroy()
+            nearestBillboard = nil
+        end
+    end
+
+    local function updateNearestESP()
+        if not nearestESPOn then return end
+        cleanupNearestESP()
+        local nearestMob, shortestDist = getNearestLavaGuy()
+        if nearestMob then
+            local head = nearestMob:FindFirstChild("Head") or nearestMob:FindFirstChildWhichIsA("BasePart")
+            if head then
+                nearestBillboard = Instance.new("BillboardGui")
+                nearestBillboard.AlwaysOnTop = true
+                nearestBillboard.Size = UDim2.new(0, 200, 0, 50)
+                nearestBillboard.StudsOffset = Vector3.new(0, 3, 0)
+                nearestBillboard.Adornee = head
+                nearestBillboard.Parent = head
+                
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(1, 0, 1, 0)
+                label.BackgroundTransparency = 1
+                label.TextStrokeTransparency = 0
+                label.TextScaled = true
+                label.Font = Enum.Font.SourceSansBold
+                label.Text = nearestMob.Name .. string.format(" (%.1f studs)", shortestDist)
+                label.Parent = nearestBillboard
+            end
+        end
+    end
+
+    nearestESPBtn.MouseButton1Click:Connect(function()
+        nearestESPOn = not nearestESPOn
+        nearestESPBtn.BackgroundColor3 = nearestESPOn and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
+        if nearestESPOn then
+            updateNearestESP()
+        else
+            cleanupNearestESP()
+        end
+    end)
+
+    -- Tween & Auto Dodge
+    local tweenDodgeOn = false
+    local tweenDodgeBtn = createButton("Tween & Auto Dodge")
+    local currentTween = nil
+    local isDodging = false
+    local dodgeStartTime = 0
+    local lastHealth = nil
+
+    local function stopCurrentTween()
+        if currentTween then
+            currentTween:Cancel()
+            currentTween = nil
+        end
+    end
+
+    local function setNoclip(enabled)
+        if char then
+            for _, part in pairs(char:GetChildren()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.CanCollide = not enabled
+                end
+            end
+        end
+    end
+
+    tweenDodgeBtn.MouseButton1Click:Connect(function()
+        tweenDodgeOn = not tweenDodgeOn
+        tweenDodgeBtn.BackgroundColor3 = tweenDodgeOn and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
+        
+        if tweenDodgeOn then
+            setNoclip(true)
+            lastHealth = humanoid.Health
+        else
+            setNoclip(false)
+            stopCurrentTween()
+            isDodging = false
+        end
+    end)
+
+    -- Détection du chat "stop" pour désactiver temporairement la sécurité
+    player.Chatted:Connect(function(message)
+        if string.lower(message) == "stop" then
+            emergencyModeDisabled = true
+            emergencyDisableTime = tick()
+            print("⏸️ Life safety disabled for 15 seconds")
+        end
+    end)
+
+    -- Dodge + Blocage avec sécurité de vie
+    humanoid.HealthChanged:Connect(function(newHealth)
+        if tweenDodgeOn then
+            if lastHealth == nil then
+                lastHealth = newHealth
+                return
+            end
+            
+            -- Sécurité de vie (15-20 HP) - TP à 70 studs
+            if newHealth <= 20 and newHealth >= 15 and not emergencyModeDisabled then
+                local nearestMob = getNearestLavaGuy()
+                if nearestMob then
+                    local head = nearestMob:FindFirstChild("Head") or nearestMob:FindFirstChildWhichIsA("BasePart")
+                    if head then
+                        stopCurrentTween()
+                        rootPart.CFrame = CFrame.new(head.Position + Vector3.new(0, 70, 0))
+                        print("🚨 SAFETY ACTIVATED - Low health detected!")
+                    end
+                end
+            end
+            
+            -- Auto-block normal (≥0.1 damage) - TP to 60 studs
+            if newHealth < lastHealth and math.abs(lastHealth - newHealth) >= 0.1 then
+                local nearestMob = getNearestLavaGuy()
+                if nearestMob then
+                    local head = nearestMob:FindFirstChild("Head") or nearestMob:FindFirstChildWhichIsA("BasePart")
+                    if head then
+                        -- TP to 60 studs immediately
+                        stopCurrentTween()
+                        rootPart.CFrame = CFrame.new(head.Position + Vector3.new(0, 60, 0))
+                        
+                        -- Block IMMEDIATELY activated
+                        isDodging = true
+                        dodgeStartTime = tick()
+                        blockRemote:FireServer("Pressed") -- IMMEDIATE
+                        
+                        -- Block deactivation after 2s
+                        task.spawn(function()
+                            task.wait(2)
+                            blockRemote:FireServer("Released")
+                            isDodging = false
+                        end)
+                    end
+                end
+            end
+            
+            lastHealth = newHealth
+        end
+    end)
+
+    -- Auto Light
+    local autoLightOn = false
+    local autoLightBtn = createButton("Auto Light")
+    local lastLightAttack = 0
+    local lightAttackCooldown = 0.1
+
+    autoLightBtn.MouseButton1Click:Connect(function()
+        autoLightOn = not autoLightOn
+        autoLightBtn.BackgroundColor3 = autoLightOn and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(60, 60, 60)
+    end)
+
+    -- Boucle principale
+    RunService.RenderStepped:Connect(function()
+        if not isAuthenticated then return end
+        
+        local currentTime = tick()
+
+        -- Reactivation of safety mode after 15 seconds
+        if emergencyModeDisabled and currentTime - emergencyDisableTime >= 15 then
+            emergencyModeDisabled = false
+            print("🔄 Life safety reactivated")
+        end
+
+        -- Auto Light (disabled during blocking)
+        if autoLightOn and not isDodging and currentTime - lastLightAttack >= lightAttackCooldown then
+            game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("ServerCombatHandler"):FireServer("LightAttack")
+            lastLightAttack = currentTime
+        end
+
+        -- ESP
+        if nearestESPOn and nearestBillboard then
+            local nearestMob, shortestDist = getNearestLavaGuy()
+            if nearestMob and nearestBillboard.Adornee == (nearestMob:FindFirstChild("Head") or nearestMob:FindFirstChildWhichIsA("BasePart")) then
+                local humanoidMob = nearestMob:FindFirstChildOfClass("Humanoid")
+                local label = nearestBillboard:FindFirstChildOfClass("TextLabel")
+                if humanoidMob and label then
+                    local hpPercent = humanoidMob.Health / humanoidMob.MaxHealth
+                    if hpPercent > 0.66 then
+                        label.TextColor3 = Color3.fromRGB(0, 255, 0)
+                    elseif hpPercent > 0.33 then
+                        label.TextColor3 = Color3.fromRGB(255, 255, 0)
+                    else
+                        label.TextColor3 = Color3.fromRGB(255, 0, 0)
+                    end
+                    label.Text = string.format("🔥 Nearest | ❤️ %d | 📏 %d studs", math.floor(humanoidMob.Health), math.floor(shortestDist))
+                end
+            else
+                updateNearestESP()
+            end
+        end
+
+        -- Return to 19 studs after dodge
+        if tweenDodgeOn then
+            local nearestMob, shortestDist = getNearestLavaGuy()
+            if nearestMob then
+                local head = nearestMob:FindFirstChild("Head") or nearestMob:FindFirstChildWhichIsA("BasePart")
+                if head then
+                    if isDodging then
+                        if currentTime - dodgeStartTime >= 2 then
+                            local targetPosition = head.Position + Vector3.new(0, 19, 0)
+                            local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                            currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(targetPosition)})
+                            currentTween:Play()
+                        end
+                    else
+                        local targetPosition = head.Position + Vector3.new(0, 19, 0)
+                        local currentDistance = (rootPart.Position - targetPosition).Magnitude
+                        if currentDistance > 5 then
+                            stopCurrentTween()
+                            local tweenInfo = TweenInfo.new(math.min(currentDistance / 20, 4), Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                            currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(targetPosition)})
+                            currentTween:Play()
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end)
